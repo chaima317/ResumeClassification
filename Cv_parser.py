@@ -39,7 +39,7 @@ class CvParser:
         self.extract_age()
         self.extraire_formation()
         #self.extraire_competence()
-        self.extract_skills_from_document()
+        self.extract_skills_from_documen()
         self.extraire_langue()
         self.extraire_centreInteret()
         self.extract_photo()
@@ -315,27 +315,36 @@ class CvParser:
         #self.informations['skills'] = list(set(listeCompetences)) or 'NULL'
      
 
+# Where response is a JSON object drilled down to the level of 'data' key
+
+
+
 
 
     #extraction of skills using apis 
 
 
     def extract_skills_from_document(self):
-           skills_from_doc_endpoint = "https://emsiservices.com/skills/versions/latest/extract"
-           text = input(self.text)
 
-           payload = "{ \"text\": \"... " + text + " ...\", \"confidenceThreshold\": " + confidence_interval + " }"
-          
-            headers = {
-                'authorization': "Bearer " + access_token,
-                'content-type': "application/json"
-            }
+        url = "https://api.iki.ai/api/skills_extraction/"
 
-            response = requests.request("POST", skills_from_doc_endpoint, data=payload.encode('utf-8'), headers=headers)
+        payload = {
+            "text": str(self.text[0:2000])
+        }
 
-            skills_found_in_document_df = pd.DataFrame(json_normalize(response.json()['data'])); # Where response is a JSON object drilled down to the level of 'data' key
-                                            
-            return skills_found_in_document_df
+        headers = {
+            'Content-Type': 'application/json'
+        }
+
+        print(len(self.text))
+
+        r = requests.post(url=url, headers=headers, data=json.dumps(payload))
+        print(r.json())
+        self.informations['skills'] = list(r.json()) or 'NULL'
+
+
+        return r.json()
+
   
           
 
