@@ -5,17 +5,17 @@ import unidecode
 import time
 import urllib.parse
 from deep_translator import GoogleTranslator
-
 from geopy.geocoders import Nominatim
 import pycountry_convert as pc
 from math import ceil
 import string
 import os
 import cv2
+import nltk
 from pandas.io.json import json_normalize
 from pdf2image import convert_from_path
 import requests
-
+from pyresparser import ResumeParser
 from gapipy import Client
 class CvParser:
 
@@ -327,20 +327,17 @@ class CvParser:
 
     def extract_skills_from_document(self):
 
+        #
+        #nltk.download('stopwords')
 
-        url = "https://auth.emsicloud.com/connect/token"
-
-        payload = "client_id=e96r13hhlh1h2nrp&client_secret=Rs5mHNy8&grant_type=client_credentials&scope=emsi_open"
-        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-
-        response = requests.request("POST", url, data=payload, headers=headers)
-
-        print(response.text)
-
-        self.informations['skills'] = list(response.text)or 'NULL'
+        data = ResumeParser('./CV_TEST/'+self.file_name)
+        print("skills")
+        print(data)
+        self.informations['skills']=data['skills']
+        return  self.informations['skills']
 
 
-        return response.text
+
 
   
           
