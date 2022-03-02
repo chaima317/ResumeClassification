@@ -15,7 +15,7 @@ import nltk
 from pandas.io.json import json_normalize
 from pdf2image import convert_from_path
 import requests
-from pyresparser import ResumeParser
+from resume_parser import resumeparse
 from gapipy import Client
 class CvParser:
 
@@ -56,20 +56,56 @@ class CvParser:
         print("poste recherche",self.informations['poste_recherche'] )
     def extract_disponibilites(self):
 
-        regexp_disponibilite = re.compile("(?:A PARTIR|DISPONIBLE) ?[\S]* ?[\S]* ?[\S]* ?(?:JANVIER|FEVRIER|MARS|AVRIL|MAI|JUIN|JUILLET|AOUT|SEPTEMBRE|OCTOBRE|NOVEMBRE|DECEMBRE) ?20[0-9][0-9]")
-        disponibilite = re.findall(regexp_disponibilite, self.text.upper())
-        self.informations['disponibilite'] = re.sub("(?:A PARTIR|DISPONIBLE) ?[\S]* ?[\S]* ?[\S]* ?((?:JANVIER|FEVRIER|MARS|AVRIL|MAI|JUIN|JUILLET|AOUT|SEPTEMBRE|OCTOBRE|NOVEMBRE|DECEMBRE) ?20[0-9][0-9])",'\g<1>', disponibilite[0]).strip() if disponibilite != [] else 'NULL'
-       
+        def extract_disponibilites(self):
+            # on definit l'expression régulière de la disponibilité
+            regexp_disponibilite = re.compile(
+                "(?:A PARTIR|DISPONIBLE) ?[\S]* ?[\S]* ?[\S]* ?(?:JANVIER|FEVRIER|MARS|AVRIL|MAI|JUIN|JUILLET|AOUT|SEPTEMBRE|OCTOBRE|NOVEMBRE|DECEMBRE) ?20[0-9][0-9]")
+            disponibilite = re.findall(regexp_disponibilite, self.text.upper())
+            # on veut calculer ici la période recherché pour le stage/
+            periode = re.compile(r' ?(DUREE|DE|\(| )+?(:)*\d* ?([A-Z-]) ?(\d+) ?(MOIS|SEMAINES)[) ]*')
+            m = periode.search(self.text.upper())
+            mois = m.group() if (m != None) else None
+
+            per1 = re.compile(r' ?(DUREE|DE|\(| )+?(:)*\d* ?(MOIS|SEMAINES)[) ]*')
+            m1 = per1.search(self.text.upper())
+            mois = m1.group() if (mois == None) and (m1 != None) else mois
+            # on renvoit la duré de stage (nombre de mois)
+            if (mois != []):
+                self.informations['disponibilite_duree'] = mois
+            else:
+                self.informations['disponibilite_duree'] = 'NULL'
+            # ici on récupère la date du début de stage
+            if (disponibilite != []):
+                per2 = re.compile(
+                    r'\d+?(?:ER|EME) ?(?:JANVIER|FEVRIER|MARS|AVRIL|MAI|JUIN|JUILLET|AOUT|SEPTEMBRE|OCTOBRE|NOVEMBRE|DECEMBRE) \d*')
+                m2 = per2.search(disponibilite[0])
+                jour = m2.group() if (m2 != None) else None
+
+                per4 = re.compile(
+                    r'(?:JANVIER|FEVRIER|MARS|AVRIL|MAI|JUIN|JUILLET|AOUT|SEPTEMBRE|OCTOBRE|NOVEMBRE|DECEMBRE)-(?:JANVIER|FEVRIER|MARS|AVRIL|MAI|JUIN|JUILLET|AOUT|SEPTEMBRE|OCTOBRE|NOVEMBRE|DECEMBRE) \d*')
+                m4 = per4.search(disponibilite[0])
+                jour = m4.group() if (jour == None) and (m4 != None) else jour
+
+                per3 = re.compile(
+                    r'\d* ?(?:JANVIER|FEVRIER|MARS|AVRIL|MAI|JUIN|JUILLET|AOUT|SEPTEMBRE|OCTOBRE|NOVEMBRE|DECEMBRE) \d*')
+                m3 = per3.search(disponibilite[0])
+                jour = m3.group() if (jour == None) and (m3 != None) else jour
+                self.informations['disponibilite_debut'] = jour
+            else:
+                self.informations['disponibilite_debut'] = 'NULL'
 
     def extract_phone_number(self):
-        regexp_phone = re.compile('\(?(?:(?:\+|00)6[6543210]|(?:\+|00)7|(?:\+|00) ?3[9643210]|(?:\+|00)9[976]\d|(?:\+|00)8[987530]\d|(?:\+|00)6[987]\d|(?:\+|00)5[90]\d|(?:\+|00)42\d|(?:\+|00)3[875]\d|(?:\+|00)2[98654321]\d|(?:\+|00)9[8543210]|(?:\+|00)8[6421]|(?:\+|00)5[87654321]|(?:\+|00)4[987654310]|(?:\+|00)2[70]|(?:\+|00)1|0)\)?\s?[1-9](?:[\s\.\-]?\(?\d{2,5}\)?){3,5}')
+        regexp_phone = re.compile(
+            '\(?(?:(?:\+|00)6[6543210]|(?:\+|00)7|(?:\+|00) ?3[9643210]|(?:\+|00)9[976]\d|(?:\+|00)8[987530]\d|(?:\+|00)6[987]\d|(?:\+|00)5[90]\d|(?:\+|00)42\d|(?:\+|00)3[875]\d|(?:\+|00)2[98654321]\d|(?:\+|00)9[8543210]|(?:\+|00)8[6421]|(?:\+|00)5[87654321]|(?:\+|00)4[987654310]|(?:\+|00)2[70]|(?:\+|00)1|0)\)?\s?[1-9](?:[\s\.\-]?\(?\d{2,5}\)?){3,5}')
         tel = re.findall(regexp_phone, self.text)
         if tel:
-            #On prend en priorité les numéros français
+            # On prend en priorité les numéros français
             numbers = [num for num in tel if re.match('(?:\+33|06|07)[0-9 \.()\-]+', num)]
             tel = numbers or tel
 
             tel = tel[0]
+            # ici si un numéro de téléphone est collé avec les deux point on met un éspace pour qu'il soit reconnu
+            tel = tel.replace(':', '')
             tel = tel.replace(' ', '')
             tel = tel.replace('-', '')
             tel = tel.replace('.', '')
@@ -79,9 +115,11 @@ class CvParser:
             tel = tel.replace('+33', '0')
             tel = tel.replace('+', '00')
             tel = tel.strip()
+            # pour reconnaître les autres numéros de téléphones qui commence par 06 07 (num français) ainsi les tronquer à 10
+            if (tel[0:2] == "06" or tel[0:2] == "07"):
+                tel = tel[0:10]
 
         self.informations['phone'] = tel or 'NULL'
-
     def extract_mail(self):
         regexp_mail = re.compile("[A-Za-z]+[A-Za-z0-9--\._]+@[A-Za-z0-9\.\- ]+\.(?:com|fr|net|org|edu|gov|mil|int|info|biz|name|pro|coop|aero|museum|arpa|asia|bike|bzh|cat|ceo|post|[a-z]{2,2})")
         mail = re.findall(regexp_mail, self.text.lower())
@@ -94,15 +132,24 @@ class CvParser:
         last_name = ''
 
         # Si le nom du fichier respectent la norme fixée
-        if re.match('2020-12-03(?:-|_)CV(?:-|_)[A-Z]+((?:-|_)[A-Z]+)*(?:-|_)[A-Z][A-Za-zéïàèîôû]+((?:-|_)[A-Z][A-Za-zéïàèîôû]+)*.pdf', self.file_name):
-            first_name = re.sub( '2020-12-03(?:-|_)CV(?:-|_)[A-Z]+((?:-|_)[A-Z]+)*(?:-|_)([A-Z][A-Za-zéïàèîôû]+((?:-|_)[A-Z][A-Za-zéïàèîôû]+)*).pdf','\g<2>', self.file_name)
-            last_name = re.sub('2020-12-03(?:-|_)CV(?:-|_)([A-Z]+((?:-|_)[A-Z]+)*)(?:-|_)[A-Z][A-Za-zéïàèîôû]+((?:-|_)[A-Z][A-Za-zéïàèîôû]+)*.pdf','\g<1>', self.file_name)
+        if re.match(
+                '2020-12-03(?:-|_)CV(?:-|_)[A-Z]+((?:-|_)[A-Z]+)*(?:-|_)[A-Z][A-Za-zéïàèîôû]+((?:-|_)[A-Z][A-Za-zéïàèîôû]+)*.pdf',
+                self.file_name):
+            first_name = re.sub(
+                '2020-12-03(?:-|_)CV(?:-|_)[A-Z]+((?:-|_)[A-Z]+)*(?:-|_)([A-Z][A-Za-zéïàèîôû]+((?:-|_)[A-Z][A-Za-zéïàèîôû]+)*).pdf',
+                '\g<2>', self.file_name)
+            last_name = re.sub(
+                '2020-12-03(?:-|_)CV(?:-|_)([A-Z]+((?:-|_)[A-Z]+)*)(?:-|_)[A-Z][A-Za-zéïàèîôû]+((?:-|_)[A-Z][A-Za-zéïàèîôû]+)*.pdf',
+                '\g<1>', self.file_name)
             first_name, last_name = corr_name(first_name, last_name)
         # Sinon on va essayer de le trouver en utilisant le nom du pdf, l'adresse mail et le texte
         else:
             if re.match('[A-Za-z]+[A-Za-z0-9--\._]+@[A-Za-z0-9\.\- ]+\.[A-Za-z]{2,4}', self.informations['mail']):
-                first_part_mail = re.sub('([A-Za-z]+[A-Za-z0-9--\._]+)@[A-Za-z0-9\.\- ]+\.[A-Za-z]{2,4}', '\g<1>', self.informations['mail'])
-                list_word = [word for word in self.text.upper().split() if (first_part_mail.upper().find(word) >= 0 or self.dir_path.upper().find(word) >= 0) and len(word) > 2]
+                first_part_mail = re.sub('([A-Za-z]+[A-Za-z0-9--\._]+)@[A-Za-z0-9\.\- ]+\.[A-Za-z]{2,4}', '\g<1>',
+                                         self.informations['mail'])
+                list_word = [word for word in self.text.upper().split()git  if
+                             (first_part_mail.upper().find(word) >= 0 or self.dir_path.upper().find(word) >= 0) and len(
+                                 word) > 2]
                 # Pour chaque mot, on appelle l'API des prénoms afin de savoir si c'est un nom ou un prénom
                 api_url = "https://api.genderize.io?"
                 for word in list(set(list_word)):
@@ -110,14 +157,14 @@ class CvParser:
                 api_url = api_url[:-1]
                 response = requests.get(api_url)
 
-                #On vérifie si c'est un nom ou un prenom
+                # On vérifie si c'est un nom ou un prenom
                 if response.json() != []:
                     for name in response.json():
                         if name.get('count') > 5 and name.get('count') < 1000:
                             last_name += ' ' + name.get('name')
                         elif name.get('count') > 1000:
                             first_name += ' ' + name.get('name')
-  
+
                 first_name = first_name.strip()
                 last_name = last_name.strip()
                 first_name, last_name = corr_name(first_name, last_name)
@@ -308,12 +355,12 @@ class CvParser:
             elif response.json().get('gender') == 'male':
                 self.informations['gender'] = 'M'
 
-    #def extraire_competence(self):
-        # clean le texte du cv
-        #regex = ("skills|SKILLS?Communication|reseautage|Esprit d equipe|Travail autonome|Capacite à travailler sous pression|marketing|redaction|developpement de contenu|Gestion du temps|Photoshop|Joomia|Indesign|Graphisme|Illustration|Photographie|Images animees|Videographie|Mise en page|Ruby|Microsoft ASP.NET MVC.Web API|C#|eco-responsables|processus de recyclage|Conceptualisation des espaces 3D|Gestion de marque|Analyse des concurrents|Marketing sur les reseaux sociaux|Optimisation du moteur de recherche|Marketing de contenu|Recherche de marche|Redacteur publicitaire|notions juridiques et financières|Rigueur|diplomatie|Travailleur social agree|Association|action sociale|Sens de responsabilites|Travail en equipe|Flexible|Facilite d integration|Sens de responsabilite|Autodidaxie|Creativite et force de proposition|Ambitieux|Organise|Applique|Desireux dapprendre|Dynamique|Communication|adaptation facile|nouvelles technologies|Benevole|Organise|autonome|assidu|curieux|Travail en equipe|Perseverant|Adaptable|Communicant|Curiosite|Serieux|Motive|rigoureux|organise|autonome|Bonne capacite danalyse|traitements de problematiques|Bonnes qualites redactionnel|bonne approche des clients|Sens negociation|Capacite dadaptation|Competences relationnelles|Esprit dequipe|Travail en equipe|Respect des delais|etablir un cahier des charges|Capacite à sorganiser|Determine|curieuse|rigoureuse|aventures|Relationnel|Adaptabilite|Apprentissage|Rigueur|Autonomie|Travail en groupe|Travail sous pression|Autonome|Organise|Rigoureux|Eclipse|NetBeans|AndroidStudio|Code:Blocks|Dev\-C\+\+|VisualStudio|STVisualdevelop|IDE|SASSoftware|SASViya|Jupyter|Linux|Ubuntu|NASM|Anaconda|Spyder|Talend|Tableau|BusinessObjects|SAS|Jira|Trello|jupyter-notebook|pycharm|Oracle|SasStudio|Mangodb|PowerBI|Talend|Tableau|Excel|Jupyter|Anaconda|Jupyter|spyder|KNIME|PhpMyAdmin|Colab|Dynamic|Dynamique|collaborative work|Collaboratif|Analyse critique|Ponctualite|Travail en groupe|Gestion de temps|Esprit d’analyse|Meticulosite|communication|Agile|Waterfal|Python|SQL|PL/SQL|SAS|Java|C|SQL|MATLAB|Python|Sql|Java|OcamlMatlab|UML|Haskell|SQL3|SAS|JavaScript|PHP|J2E|Pascal|HTML|CSS|XML|R|Java/JEE|OCaml|Mysql|Html|VBA|DATA warehouse|DateWarehouse|PHP5|Symfony|Angular9|SpringBoot|JEE|HTML5|CSS3|JS|JavaScript|pandas|numpy|matplotlib|seaborn|PLSQL|Ocaml|Scala|SQL|PLSQL|NoSQL|Prolog|SAS|Oracle|MongoDB|MySQL|Talend|Tableau|BusinessObjects|TensorFlow|Keras|Scikit-learn|Scikit-Fuzzy|MicrosoftOfficeExcel|Prolog|Oracle|MongoDB|MySQL|DataBase|Talend|DataIntegration|DataQuality|SAS|Tableau|BusinessObjects|HADOOP|HDFS|MapReduce|HBASE|SPARK|RSTUDIO|WEKA|IBMSPSSMODELER|REDIS|MongoDB|JupyterNotebook|Eclipse|SAS|VisualStudioCode|Rstudio|AndroidStudio|Git|Oracle|SASViya|SAS9|MangoDB|MATLAB|Oracle|BusinessObjects|MethodeAgile|SCRUM|Trello|GitHub|oracle|PLSQL|SQLserver|SSIS|Trello|Word|Excel|PowerPoint|make|git|Oracle|SasStudio|PowerBI|Excel|Jupyter|ApacheKakfa|Elasticsearch|Logstash|Kibana|FileBeat|Trello|MarvenApp|Git|UML|Docker|SpringBoot|SpringData|SpringSecurity|HTML|Thymeleaf|CSS|VB|UML|GRASPpattern|Merise|Proto.io|Axure|Internet des objets|IOT|Business intelligence|Representation graphique de donnees statistiques|Domotique|meetup tafterworks|Statistiques")
-        #matches = re.finditer(regex, self.text, re.MULTILINE | re.IGNORECASE)       
-        #listeCompetences = [unidecode.unidecode(match.group().upper().strip()) for matchNum, match in enumerate(matches, start=1)]
-        #self.informations['skills'] = list(set(listeCompetences)) or 'NULL'
+    def extraire_competence(self):
+
+        regex = ("skills|SKILLS?Communication|reseautage|Esprit d equipe|Travail autonome|Capacite à travailler sous pression|marketing|redaction|developpement de contenu|Gestion du temps|Photoshop|Joomia|Indesign|Graphisme|Illustration|Photographie|Images animees|Videographie|Mise en page|Ruby|Microsoft ASP.NET MVC.Web API|C#|eco-responsables|processus de recyclage|Conceptualisation des espaces 3D|Gestion de marque|Analyse des concurrents|Marketing sur les reseaux sociaux|Optimisation du moteur de recherche|Marketing de contenu|Recherche de marche|Redacteur publicitaire|notions juridiques et financières|Rigueur|diplomatie|Travailleur social agree|Association|action sociale|Sens de responsabilites|Travail en equipe|Flexible|Facilite d integration|Sens de responsabilite|Autodidaxie|Creativite et force de proposition|Ambitieux|Organise|Applique|Desireux dapprendre|Dynamique|Communication|adaptation facile|nouvelles technologies|Benevole|Organise|autonome|assidu|curieux|Travail en equipe|Perseverant|Adaptable|Communicant|Curiosite|Serieux|Motive|rigoureux|organise|autonome|Bonne capacite danalyse|traitements de problematiques|Bonnes qualites redactionnel|bonne approche des clients|Sens negociation|Capacite dadaptation|Competences relationnelles|Esprit dequipe|Travail en equipe|Respect des delais|etablir un cahier des charges|Capacite à sorganiser|Determine|curieuse|rigoureuse|aventures|Relationnel|Adaptabilite|Apprentissage|Rigueur|Autonomie|Travail en groupe|Travail sous pression|Autonome|Organise|Rigoureux|Eclipse|NetBeans|AndroidStudio|Code:Blocks|Dev\-C\+\+|VisualStudio|STVisualdevelop|IDE|SASSoftware|SASViya|Jupyter|Linux|Ubuntu|NASM|Anaconda|Spyder|Talend|Tableau|BusinessObjects|SAS|Jira|Trello|jupyter-notebook|pycharm|Oracle|SasStudio|Mangodb|PowerBI|Talend|Tableau|Excel|Jupyter|Anaconda|Jupyter|spyder|KNIME|PhpMyAdmin|Colab|Dynamic|Dynamique|collaborative work|Collaboratif|Analyse critique|Ponctualite|Travail en groupe|Gestion de temps|Esprit d’analyse|Meticulosite|communication|Agile|Waterfal|Python|SQL|PL/SQL|SAS|Java|C|SQL|MATLAB|Python|Sql|Java|OcamlMatlab|UML|Haskell|SQL3|SAS|JavaScript|PHP|J2E|Pascal|HTML|CSS|XML|R|Java/JEE|OCaml|Mysql|Html|VBA|DATA warehouse|DateWarehouse|PHP5|Symfony|Angular9|SpringBoot|JEE|HTML5|CSS3|JS|JavaScript|pandas|numpy|matplotlib|seaborn|PLSQL|Ocaml|Scala|SQL|PLSQL|NoSQL|Prolog|SAS|Oracle|MongoDB|MySQL|Talend|Tableau|BusinessObjects|TensorFlow|Keras|Scikit-learn|Scikit-Fuzzy|MicrosoftOfficeExcel|Prolog|Oracle|MongoDB|MySQL|DataBase|Talend|DataIntegration|DataQuality|SAS|Tableau|BusinessObjects|HADOOP|HDFS|MapReduce|HBASE|SPARK|RSTUDIO|WEKA|IBMSPSSMODELER|REDIS|MongoDB|JupyterNotebook|Eclipse|SAS|VisualStudioCode|Rstudio|AndroidStudio|Git|Oracle|SASViya|SAS9|MangoDB|MATLAB|Oracle|BusinessObjects|MethodeAgile|SCRUM|Trello|GitHub|oracle|PLSQL|SQLserver|SSIS|Trello|Word|Excel|PowerPoint|make|git|Oracle|SasStudio|PowerBI|Excel|Jupyter|ApacheKakfa|Elasticsearch|Logstash|Kibana|FileBeat|Trello|MarvenApp|Git|UML|Docker|SpringBoot|SpringData|SpringSecurity|HTML|Thymeleaf|CSS|VB|UML|GRASPpattern|Merise|Proto.io|Axure|Internet des objets|IOT|Business intelligence|Representation graphique de donnees statistiques|Domotique|meetup tafterworks|Statistiques")
+        matches = re.finditer(regex, self.text, re.MULTILINE | re.IGNORECASE)
+        listeCompetences = [unidecode.unidecode(match.group().upper().strip()) for matchNum, match in enumerate(matches, start=1)]
+        self.informations['skills'] = list(set(listeCompetences)) or 'NULL'
      
 
 # Where response is a JSON object drilled down to the level of 'data' key
@@ -324,18 +371,17 @@ class CvParser:
 
     #extraction of skills using apis 
 
-
+    #https://pypi.org/project/resume-parser/
     def extract_skills_from_document(self):
 
-        #
-        #nltk.download('stopwords')
+        data = resumeparse.read_file(self.file_name)
+        print("skills !!!")
+        print(data["skills"])
+        if (len(data["skills"])== 0):
+              self.extraire_competence()
 
-        data = ResumeParser('./CV_TEST/'+self.file_name)
-        print("skills")
-        print(data)
-        self.informations['skills']=data['skills']
-        return  self.informations['skills']
-
+        else:
+            self.informations['skills'] = list(data["skills"])
 
 
 
