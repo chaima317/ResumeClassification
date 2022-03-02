@@ -147,7 +147,7 @@ class CvParser:
             if re.match('[A-Za-z]+[A-Za-z0-9--\._]+@[A-Za-z0-9\.\- ]+\.[A-Za-z]{2,4}', self.informations['mail']):
                 first_part_mail = re.sub('([A-Za-z]+[A-Za-z0-9--\._]+)@[A-Za-z0-9\.\- ]+\.[A-Za-z]{2,4}', '\g<1>',
                                          self.informations['mail'])
-                list_word = [word for word in self.text.upper().split()git  if
+                list_word = [word for word in self.text.upper().split() if
                              (first_part_mail.upper().find(word) >= 0 or self.dir_path.upper().find(word) >= 0) and len(
                                  word) > 2]
                 # Pour chaque mot, on appelle l'API des prénoms afin de savoir si c'est un nom ou un prénom
