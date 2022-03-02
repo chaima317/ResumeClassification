@@ -14,6 +14,7 @@ import os
 import cv2
 from pandas.io.json import json_normalize
 from pdf2image import convert_from_path
+import requests
 
 from gapipy import Client
 class CvParser:
@@ -39,7 +40,7 @@ class CvParser:
         self.extract_age()
         self.extraire_formation()
         #self.extraire_competence()
-        self.extract_skills_from_documen()
+        self.extract_skills_from_document()
         self.extraire_langue()
         self.extraire_centreInteret()
         self.extract_photo()
@@ -326,24 +327,20 @@ class CvParser:
 
     def extract_skills_from_document(self):
 
-        url = "https://api.iki.ai/api/skills_extraction/"
 
-        payload = {
-            "text": str(self.text[0:2000])
-        }
+        url = "https://auth.emsicloud.com/connect/token"
 
-        headers = {
-            'Content-Type': 'application/json'
-        }
+        payload = "client_id=e96r13hhlh1h2nrp&client_secret=Rs5mHNy8&grant_type=client_credentials&scope=emsi_open"
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
 
-        print(len(self.text))
+        response = requests.request("POST", url, data=payload, headers=headers)
 
-        r = requests.post(url=url, headers=headers, data=json.dumps(payload))
-        print(r.json())
-        self.informations['skills'] = list(r.json()) or 'NULL'
+        print(response.text)
+
+        self.informations['skills'] = list(response.text)or 'NULL'
 
 
-        return r.json()
+        return response.text
 
   
           
